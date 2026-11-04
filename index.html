@@ -162,7 +162,8 @@ async function cloudLoad(){
     const r=await fetch(GRAPH+'/me/drive/root:/'+path+':/content',{headers:h});
     if(!r.ok)throw new Error('OneDrive '+r.status);
     Object.assign(ST,await r.json());return true;
-  }catch(e){showSignIn('Could not load your data: '+e.message);return false}
+  }catch(e){const soft=/timeout|interaction_required|login_required|consent_required|no_account|token_renewal|iframe/i.test((e.errorCode||'')+' '+(e.message||''));
+    showSignIn(soft?'Your Microsoft sign-in needs refreshing. Click Sign in with Microsoft.':'Could not load your data: '+e.message);return false}
 }
 async function cloudSave(){
   const c=cfg(),path=encodeURI(c.path||DEFAULT_PATH),t=await msalToken(true);
@@ -187,7 +188,7 @@ function showSetup(msg){
 function showSignIn(msg){
   gate('Sign in',`${msg?`<p><b>${esc(msg)}</b></p>`:''}<p>Sign in with Microsoft to load the register from OneDrive.</p>
   <div class="bar"><button class="btn p" id="si">Sign in with Microsoft</button><button class="btn" id="ch">Change connection</button></div>`);
-  $('#si').onclick=async()=>{try{const x=await MSAL.loginPopup({scopes:SCOPES});ACC=x.account;location.reload()}catch(e){toast('Sign-in failed: '+e.message)}};
+  $('#si').onclick=async()=>{try{const x=await MSAL.loginPopup({scopes:SCOPES,prompt:'select_account'});ACC=x.account;location.reload()}catch(e){toast('Sign-in failed: '+(e.message||e.errorCode)+' - if no window opened, allow pop-ups for this site and try again.')}};
   $('#ch').onclick=()=>showSetup();
 }
 let saveT;
@@ -1246,6 +1247,8 @@ function openCorp(id){
 }
 
 (async()=>{
+  /* Microsoft silent sign-in loads this page in a hidden frame; it must not run the app or consume the sign-in response there */
+  if(window.self!==window.top&&/[#?&](code|error|state|id_token)=/.test(location.hash+location.search))return;
   const ok=await loadState();if(!ok)return;
   await incLoad();
   for(const k of ['sops','fnd','sce','docs','people','notice'])ST[k]=ST[k]||{};
